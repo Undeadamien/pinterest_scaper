@@ -1,58 +1,105 @@
+"""A web scraper that scrape image from Pinterest"""
+
+from random import choice
+
 import requests
-from time import sleep
-from random import choice, randint
+import selenium.webdriver.support.expected_conditions as EC
 from selenium import webdriver
-from bs4 import BeautifulSoup
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
 
-# where the images should be saved
-IMAGE_PATH = "C:/Users/Damien/Desktop/DRAWING_/Photo_ref"
+DESTINATION = "C:\\Users\\Damien\\Desktop\\DRAWING_\\Photo_ref"
 
-SEARCH = ["kan liu", "sam does art", "ross draws", "ilya kushinov", "wlop art",
-          "colorful anime art"]
+OPTIONS = webdriver.ChromeOptions()
+OPTIONS.add_argument("--start-maximized")
+OPTIONS.add_argument("--incognito")
 
 
-def main(search):
+class Scraper:
+    """Scraper"""
+    def __init__(self):
+        self.key_word = self.ask_key_word()
+        self.image_amount = self.ask_amount()
+        self.urls = set()
 
-    search: str
+    def ask_key_word(self):
+        """Ask for a valid sequence of word"""
+        res = input("What image do you want to scrap?\n")
+        while True:
+            res = res.strip().replace(" ", "+")
+            if res == "":
+                res = input("Please enter valid key word:\n")
+            else:
+                return res
 
-    search = search.strip().replace(' ', '%20')
-    DRIVER = webdriver.Chrome()
-    # we have to use selenium because the images won't load with request
-    DRIVER.get(f"https://www.pinterest.fr/search/pins/?q={search}&rs=typed")
+    def ask_amount(self):
+        """Ask for an integer"""
+        res = input("And how many?\n")
+        while True:
+            try:
+                res = int(res)
+                return res
+            except ValueError:
+                res = input("Please enter a valid number\n")
 
-    DRIVER.maximize_window()  # to load more images on screen
-    sleep(3)
+    def run(self):
+        """
+        Access google image search and scrap for
+        the selected amount of images with selected keyword
+        """
+        driver = webdriver.Chrome(options=OPTIONS)
+        wait = WebDriverWait(driver, 5)
+        action = ActionChains(driver)
+          
+        driver.get("https://www.google.com/search?q="
+                   f"{self.key_word}"
+                   "+pinterest&source=lnms&tbm=isch&sa")
+        # in case there is a cookie pop-up
+        try:
+            refuse_button = "//*[@id='yDmH0d']/c-wiz/div/div/div/div[2]/"\
+                            "div[1]/div[3]/div[1]/div[1]/form[1]/div/div"\
+                            "/button"
+            wait.until(EC.presence_of_element_located((By.XPATH,
+                                                       refuse_button)))
+            driver.find_element(By.XPATH, refuse_button).click()
+        except TimeoutException:
+            pass
 
-    for _ in range(randint(0, 10)):
-        DRIVER.execute_script("window.scrollBy(0, 500)", "")
-        sleep(0.1)
+        thumbnails_path = "//*[@id='islrg']/div[1]/div/a[1]/div[1]/img"
+        wait.until(EC.presence_of_all_elements_located((By.XPATH,
+                                                        thumbnails_path)))
 
-    soup = BeautifulSoup(DRIVER.page_source, "html.parser")
+        thumbnails = driver.find_elements(By.XPATH,
+                                          thumbnails_path)
 
-    # get all the links to all the pins present on screen
-    links = []
-    for element in soup.find_all("a", href=True):
-        if "/pin/" in element["href"]:
-            links.append(element["href"])
+        while len(self.urls) < self.image_amount:
+            thumbnail = choice(thumbnails)
+            action.move_to_element(thumbnail).click().perform()
+            image_path = "//*[@id='Sva75c']/div[2]/div/div[2]/div[2]/div[2]"\
+                         "/c-wiz/div/div[1]/div[2]/div[2]/div/a/img"
+            try:
+                wait.until(
+                    EC.text_to_be_present_in_element_attribute((By.XPATH,
+                                                                image_path),
+                                                               "src",
+                                                               "pinimg"))
+            except TimeoutException:
+                #the image was not from pinterest
+                #or the url was not loaded
+                continue
 
-    # we don't need to load the page with selenium
-    page_source = requests.get(f"https://www.pinterest.fr{choice(links)}")
-    soup = BeautifulSoup(page_source.content, "html.parser")
-    image_url = soup.find("img", src=True)["src"]
+            image = driver.find_element(By.XPATH, image_path)
+            print(image.get_attribute("src"))
+            self.urls.add(image.get_attribute("src"))
 
-    image_name = image_url.split("/")[-1]
-
-    # save the image if the image is a jpg
-    if image_name.endswith(".jpg"):
-        with open(f"{IMAGE_PATH}/{image_name}", "wb") as image_file:
-            image_file.write(requests.get(image_url).content)
-    else:
-        print("the image was a png")
-
-    DRIVER.quit()
+        for image_url in self.urls:
+            image_name = image_url.split("/")[-1]
+            with open(f"{DESTINATION}\\{image_name}", "wb") as image_file:
+                image_file.write(requests.get(image_url, timeout=10).content)
 
 
 if __name__ == "__main__":
+    Scraper().run()
 
-    for _ in range(5):
-        main(choice(SEARCH))
