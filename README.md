@@ -1,4 +1,5 @@
 # pinterest_scaper
 
-A simple web scraper that download random image from pinterest, take word and integer as input.
+A simple web scraper that download random image from pinterest, take key words and amount as input.
+
 Access the images from google image.
