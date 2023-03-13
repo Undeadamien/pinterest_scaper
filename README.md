@@ -1,4 +1,4 @@
-# pinterest_scaper
+# pinterest_scraper
 
 A simple web scraper that download random image from Pinterest, take key words and amount as input.
 
